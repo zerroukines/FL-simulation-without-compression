@@ -1,0 +1,195 @@
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - 9090:9090
+    deploy:
+      restart_policy:
+        condition: on-failure
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - cadvisor
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.0
+    container_name: cadvisor
+    privileged: true
+    deploy:
+      restart_policy:
+        condition: on-failure
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - 3000:3000
+    deploy:
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      - ./config/grafana.ini:/etc/grafana/grafana.ini
+      - ./config/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./config/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+    depends_on:
+      - prometheus
+      - cadvisor
+    command:
+      - --config=/etc/grafana/grafana.ini
+
+  server:
+    container_name: server
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python server.py --number_of_rounds=10
+    environment:
+      FLASK_RUN_PORT: 6000
+      DOCKER_HOST_IP: host.docker.internal
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "6000:6000"
+      - "8265:8265"
+      - "8000:8000"
+    stop_signal: SIGINT
+    depends_on:
+      - prometheus
+      - grafana
+    
+  client1:
+    container_name: client1
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python client.py --server_address=server:8080 --data_percentage=0.6  --client_id=1 --total_clients=5 --batch_size=16 --learning_rate=0.005
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: "512m"
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "6001:6001"
+    depends_on:
+      - server
+    environment:
+      FLASK_RUN_PORT: 6001
+      container_name: client1
+      DOCKER_HOST_IP: host.docker.internal
+    stop_signal: SIGINT
+
+  client2:
+    container_name: client2
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python client.py --server_address=server:8080 --data_percentage=0.6  --client_id=2 --total_clients=5 --batch_size=16 --learning_rate=0.005
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: "5g"
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "6002:6002"
+    depends_on:
+      - server
+    environment:
+      FLASK_RUN_PORT: 6002
+      container_name: client2
+      DOCKER_HOST_IP: host.docker.internal
+    stop_signal: SIGINT
+
+  client3:
+    container_name: client3
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python client.py --server_address=server:8080 --data_percentage=0.6  --client_id=3 --total_clients=5 --batch_size=12 --learning_rate=0.002
+    deploy:
+      resources:
+        limits:
+          cpus: "0.6" 
+          memory: "384m"
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "6003:6003"
+    depends_on:
+      - server
+    environment:
+      FLASK_RUN_PORT: 6003
+      container_name: client3
+      DOCKER_HOST_IP: host.docker.internal
+    stop_signal: SIGINT
+
+  client4:
+    container_name: client4
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python client.py --server_address=server:8080 --data_percentage=0.6  --client_id=4 --total_clients=5 --batch_size=4 --learning_rate=0.0005
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: "5g"
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "6004:6004"
+    depends_on:
+      - server
+    environment:
+      FLASK_RUN_PORT: 6004
+      container_name: client4
+      DOCKER_HOST_IP: host.docker.internal
+    stop_signal: SIGINT
+
+  client5:
+    container_name: client5
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python client.py --server_address=server:8080 --data_percentage=0.6  --client_id=5 --total_clients=5 --batch_size=4 --learning_rate=0.005
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: "128m"
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "6005:6005"
+    depends_on:
+      - server
+    environment:
+      FLASK_RUN_PORT: 6005
+      container_name: client5
+      DOCKER_HOST_IP: host.docker.internal
+    stop_signal: SIGINT
+volumes:
+  grafana-storage:
